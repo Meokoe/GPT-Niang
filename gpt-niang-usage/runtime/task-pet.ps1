@@ -1,15 +1,15 @@
 ﻿$script:taskPetEnabled=$true
 $script:taskPetState='idle';$script:taskPetAt=0;$script:taskPetShownAt=0;$script:taskPetPending=$false
 $script:taskPetQuotes=@{
- idle=@('我在这里，随时可以开工。','休息一下，下一步交给我陪你。')
- thinking=@('正在认真思考，龙角都转起来啦。','让我理一理思路，很快就好。')
- working=@('工具正在忙碌，我也在陪着你。','一步一步，把任务做好。')
- searching=@('让我找找可靠的资料。','正在翻阅线索，稍等一下。')
- coding=@('开始动手改代码啦。','把想法变成代码，一点点完成。')
- waiting=@('有个问题需要你看看哦。','等你的选择，我就在这里。')
- completed=@('这轮任务完成啦，来看看结果吧！','辛苦啦，回复已经准备好。')
- error=@('遇到问题啦，看看日志再决定下一步。','这一步没成功，我们看看原因。')
- interrupted=@('这轮先停下了，随时可以继续。','收到，先收好小爪子。')
+ idle=@('要开工了吗？我搬个小板凳来。','休息一下，下一步交给我陪你。')
+ thinking=@('龙角都转起来啦！','唔，我再想想……')
+ working=@('工具开工啦！我在旁边看着。','一步一步，把任务做好。')
+ searching=@('线索在哪儿呢？我再找找。','正在翻阅线索，稍等一下。')
+ coding=@('轮到小爪子敲键盘啦！','把想法变成代码，一点点完成。')
+ waiting=@('选哪一个呢？我等你。','该你拿主意啦！')
+ completed=@('成啦！快来看看结果！','辛苦啦，回复已经准备好。')
+ error=@('这一步卡住了……先看看日志吧。','这一步没成功，我们看看原因。')
+ interrupted=@('先停一下……想继续时叫我就好。','收到，先收好小爪子。')
 }
 $script:taskPetLastQuote=@{}
 function Get-TaskPetQuotes([string]$State) {
