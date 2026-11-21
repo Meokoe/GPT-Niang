@@ -7,6 +7,7 @@ const {values, positionals} = parseArgs({
   options: {
     voice: {type: 'string', default: 'fish'},
     speed: {type: 'string', default: '100'},
+    timings: {type: 'string'},
   },
 });
 const speed = Number(values.speed);
@@ -28,6 +29,13 @@ if (text.length > 256) throw new Error('Bubble text exceeds the character limit'
 
 const rate = speed / 100;
 const voice = values.voice;
-const wave = toWav(synth(text, {voice, step: VOICES[voice].step / rate, gap: 0.22 / rate}));
+const timings = [];
+const wave = toWav(synth(text, {
+  voice,
+  step: VOICES[voice].step / rate,
+  gap: 0.22 / rate,
+  onSyllable: values.timings ? startMs => timings.push(startMs) : undefined,
+}));
 if (positionals[0]) writeFileSync(positionals[0], wave, {flag: 'wx'});
 else process.stdout.write(wave);
+if (values.timings) writeFileSync(values.timings, JSON.stringify(timings), {flag: 'wx'});

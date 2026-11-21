@@ -74,8 +74,11 @@ try{
  }
  $music.Motion.Phase=2;$music.Motion.Props=1;$music.Motion.Y=$music.Motion.Floor;$music.Redraw();Pump 40
  Save-Pose 'native-music-standing.png'
- $music.Motion.Bend=.40;$girl.RenderTransform.ScaleY=.60;$music.Redraw();Save-Pose 'native-music-press.png'
- $music.Motion.Bend=-.16;$girl.RenderTransform.ScaleY=1.16;$music.Redraw();Save-Pose 'native-music-rebound.png'
+ $speech=$window.FindName('SpeechMotion')
+ if($girl.RenderTransform.Children[1]-ne $speech){throw 'Music layout detached the speech motion'}
+ $press=$girl.RenderTransform.Children[0]
+ $music.Motion.Bend=.40;$press.ScaleY=.60;$music.Redraw();Save-Pose 'native-music-press.png'
+ $music.Motion.Bend=-.16;$press.ScaleY=1.16;$music.Redraw();Save-Pose 'native-music-rebound.png'
  if($music.LampHandle-eq [IntPtr]::Zero){throw 'Top lamp did not create its independent native surface'}
  $lampStyle=[MusicVisualProbe]::GetWindowLongPtr($music.LampHandle,-20).ToInt64()
  if(($lampStyle-band 0x080000A0)-ne 0x080000A0){throw 'Lamp is not click-through and non-activating'}

@@ -49,7 +49,8 @@ function Tick-TaskPet([long]$Now,[bool]$Visible) {
   Open-WidgetBubble 'quote' (Get-TaskPetQuote $script:taskPetState)
   # A short native WPF motion leaves drag, scaling and music transforms intact.
   if(!$script:widgetMusic -or !$script:widgetMusic.Enabled){
-    $motion=[Windows.Media.TranslateTransform]::new();$script:ui.Girl.RenderTransform=$motion
+    $motion=$script:ui.TaskMotion
+    if(!$motion){$motion=[Windows.Media.TranslateTransform]::new();$script:ui.Girl.RenderTransform=$motion}
     $animation=[Windows.Media.Animation.DoubleAnimation]::new()
     $animation.From=0;$animation.To=if($script:taskPetState-eq 'completed'){-10}else{-3}
     $animation.Duration=[Windows.Duration]::new([TimeSpan]::FromMilliseconds(260));$animation.AutoReverse=$true

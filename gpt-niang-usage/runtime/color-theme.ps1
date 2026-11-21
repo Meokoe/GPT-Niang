@@ -201,6 +201,7 @@ function Initialize-WidgetColors {
   [Windows.Controls.Canvas]::SetLeft($tint,[Windows.Controls.Canvas]::GetLeft($script:ui.Girl))
   [Windows.Controls.Canvas]::SetTop($tint,[Windows.Controls.Canvas]::GetTop($script:ui.Girl))
   $root.Children.Insert($root.Children.IndexOf($script:ui.Girl)+1,$tint)
+  if($script:ui.SpeechMotion){$halo.RenderTransform=$script:ui.SpeechMotion;$tint.RenderTransform=$script:ui.SpeechMotion}
   $script:widgetColors.halo=$halo;$script:widgetColors.tint=$tint
   $script:window.Add_IsVisibleChanged({
     if($script:widgetColors){Update-WidgetColorScene}

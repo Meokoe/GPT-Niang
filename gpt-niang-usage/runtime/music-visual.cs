@@ -149,6 +149,7 @@ public sealed class GptMusicVisual : IDisposable {
     readonly Action<int,int> followOffset;readonly GptMusicCapture capture;
     readonly MusicArt under,over;readonly ScaleTransform press=new ScaleTransform();readonly Color[] palette;
     readonly Transform oldTransform;readonly Point oldOrigin;readonly bool glasses;
+    readonly TransformGroup figureTransform=new TransformGroup();
     readonly FrameworkElement menuButton;double menuLeft,menuTop;
     double baseLeft,baseTop,normalX,normalY,relativeX,bottomDistance,dpi=1,figurePhysical,anchorX,anchorY,lastFrame,colorTime,artTime,lastLightPaint,grabX,grabY,lastGrabAt;
     readonly Point initialFoot;
@@ -190,6 +191,9 @@ public sealed class GptMusicVisual : IDisposable {
     public GptMusicVisual(Window window,Image girl,FrameworkElement bubble,Action<int,int> followOffset,Color[] colors,bool useGlasses) {
         this.window=window;this.girl=girl;this.bubble=bubble;this.followOffset=followOffset;palette=colors;glasses=useGlasses;
         root=(Canvas)girl.Parent;oldTransform=girl.RenderTransform;oldOrigin=girl.RenderTransformOrigin;
+        figureTransform.Children.Add(press);
+        var speechMotion=window.FindName("SpeechMotion") as TranslateTransform;
+        if(speechMotion!=null)figureTransform.Children.Add(speechMotion);
         baseLeft=Canvas.GetLeft(girl);baseTop=Canvas.GetTop(girl);
         menuButton=window.FindName("MenuButton") as FrameworkElement;if(menuButton!=null){menuLeft=Canvas.GetLeft(menuButton);menuTop=Canvas.GetTop(menuButton);}
         var first=AlphaBounds((BitmapSource)girl.Source,girl.Width,girl.Height);initialFoot=girl.PointToScreen(new Point(first.Left+first.Width/2,first.Bottom));
@@ -209,7 +213,7 @@ public sealed class GptMusicVisual : IDisposable {
         double left=175-(alpha.Left+alpha.Width/2),top=350-alpha.Bottom;
         Canvas.SetLeft(girl,left);Canvas.SetTop(girl,top);girl.RenderTransformOrigin=new Point(0,0);
         if(menuButton!=null){Canvas.SetLeft(menuButton,menuLeft+left-baseLeft);Canvas.SetTop(menuButton,menuTop+top-baseTop);}
-        press.CenterX=alpha.Left+alpha.Width/2;press.CenterY=alpha.Bottom;girl.RenderTransform=press;
+        press.CenterX=alpha.Left+alpha.Width/2;press.CenterY=alpha.Bottom;girl.RenderTransform=figureTransform;
         imageRect=new Rect(left,top,girl.Width,girl.Height);
         window.UpdateLayout();MeasureAnchor();under.InvalidateVisual();over.InvalidateVisual();
     }

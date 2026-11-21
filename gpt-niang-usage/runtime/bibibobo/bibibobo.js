@@ -60,7 +60,7 @@ export function voice(out, sampleRate, t, m, dur, v, glide = 0, vowel = 0) {
 /**
  * 把一句话合成为单声道采样（Float32Array，范围 -1..1）。
  * @param {string} text 要说的话。问号结尾尾音上扬；带感叹号整句升高；省略号结尾整句压低、尾音下滑。
- * @param {{voice?: 'fish'|'lumo'|object, step?: number, sampleRate?: number, gap?: number}} [opts]
+ * @param {{voice?: 'fish'|'lumo'|object, step?: number, sampleRate?: number, gap?: number, onSyllable?: (startMs: number) => void}} [opts]
  *   voice 声线；step 每个字间隔多少秒；gap 句子之间停多少秒。
  */
 export function synth(text, opts = {}) {
@@ -77,7 +77,9 @@ export function synth(text, opts = {}) {
       const last = i === tk.length - 1;
       const m = v.scale[hash(w) % v.scale.length] + (shout ? 3 : 0) - (sad ? 3 : 0);
       const dur = Math.min(step * v.hold, v.maxDur) + (last && (ask || shout || sad) ? 0.1 : 0);
-      voice(out, sampleRate, t + i * step, m, dur, v, last && ask ? 5 : last && sad ? -4 : last ? v.fall : 0, hash(w));
+      const start = t + i * step;
+      opts.onSyllable?.(Math.floor(start * sampleRate) * 1000 / sampleRate);
+      voice(out, sampleRate, start, m, dur, v, last && ask ? 5 : last && sad ? -4 : last ? v.fall : 0, hash(w));
     });
     t += tk.length * step + gap;
   }

@@ -17,6 +17,7 @@ function Stop-WidgetBubbleVoice {
     if (!$voice) { return }
     $script:bubbleVoice = $null
     $voice.Timer.Stop()
+    if ($script:ui.SpeechMotion) { $script:ui.SpeechMotion.Y = 0 }
     if ($voice.Player) {
         try { $voice.Player.Close() } catch {}
     }
@@ -29,6 +30,31 @@ function Stop-WidgetBubbleVoice {
         } catch {} finally { $voice.Process.Dispose() }
     }
     try { [IO.File]::Delete($voice.Path) } catch {}
+    try { [IO.File]::Delete($voice.TimingPath) } catch {}
+}
+
+function Update-WidgetSpeechMotion($Voice, [double]$PositionMs) {
+    $motion = $script:ui.SpeechMotion
+    if (!$motion -or !$Voice.Timings.Count) { return }
+
+    $next = $Voice.BeatIndex + 1
+    while ($next -lt $Voice.Timings.Count -and $Voice.Timings[$next] -le $PositionMs) {
+        $Voice.BeatIndex = $next
+        $next++
+    }
+    if ($Voice.BeatIndex -lt 0) { return }
+
+    $start = $Voice.Timings[$Voice.BeatIndex]
+    $duration = 105.0
+    if ($next -lt $Voice.Timings.Count) {
+        $duration = [Math]::Min($duration, ($Voice.Timings[$next] - $start) * 0.8)
+    }
+    $elapsed = $PositionMs - $start
+    # One little hop per syllable. Reading the media clock keeps the motion
+    # in sync if audio startup or a dispatcher frame is delayed.
+    $motion.Y = if ($elapsed -ge 0 -and $elapsed -lt $duration) {
+        -3.8 * [Math]::Sin([Math]::PI * $elapsed / $duration)
+    } else { 0 }
 }
 
 function Test-WidgetBubbleVoiceActive {
@@ -49,10 +75,12 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
     $node = [string]$script:config.nodePath
     if (!$node) { return }
     $path = Join-Path ([IO.Path]::GetTempPath()) ('gpt-niang-bubble-' + [Guid]::NewGuid().ToString('N') + '.wav')
+    $timingPath = $path + '.timings.json'
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $node
     $start.Arguments = '"' + (Join-Path $script:appDir 'runtime\bubble-voice.mjs') + '" "' + $path + '"'
     $start.Arguments += ' --voice ' + $script:bubbleVoiceStyle + ' --speed ' + $script:bubbleVoiceSpeed
+    $start.Arguments += ' --timings "' + $timingPath + '"'
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
     $start.RedirectStandardInput = $true
@@ -60,6 +88,9 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
     $timer.Interval = [TimeSpan]::FromMilliseconds(40)
     $script:bubbleVoice = @{
         Path = $path
+        TimingPath = $timingPath
+        Timings = @()
+        BeatIndex = -1
         Process = $null
         Player = $null
         Timer = $timer
@@ -83,11 +114,19 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
                     Stop-WidgetBubbleVoice
                     return
                 }
-                if ($voice.Player -or !$voice.Process.HasExited -or $elapsed -lt $voice.DelayMs) { return }
+                if ($voice.Player) {
+                    Update-WidgetSpeechMotion $voice $voice.Player.Position.TotalMilliseconds
+                    return
+                }
+                if (!$voice.Process.HasExited -or $elapsed -lt $voice.DelayMs) { return }
                 $ok = $voice.Process.ExitCode -eq 0 -and [IO.File]::Exists($voice.Path)
                 $voice.Process.Dispose()
                 $voice.Process = $null
                 if (!$ok) { Stop-WidgetBubbleVoice; return }
+                try {
+                    $timings = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($voice.TimingPath)) -ErrorAction Stop
+                    $voice.Timings = [double[]]$timings
+                } catch {}
                 # PCM is 44.1 kHz mono, 16-bit. Allow time for the selected speed and audio startup.
                 $waveBytes = ([IO.FileInfo]::new($voice.Path)).Length - 44
                 $voice.EndAfterMs = $elapsed + [Math]::Max(0, $waveBytes / 88.2) + 5000
@@ -104,6 +143,7 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
                 })
                 $voice.Player.Open([Uri]::new($voice.Path))
                 $voice.Player.Play()
+                if ($voice.Timings.Count) { $voice.Timer.Interval = [TimeSpan]::FromMilliseconds(16) }
             } catch { Stop-WidgetBubbleVoice }
         })
         $timer.Start()
