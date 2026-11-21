@@ -28,6 +28,7 @@ $script:ui=@{}
 foreach($name in @('Bubble','Tail','TailNear','SceneText')){$script:ui[$name]=$poseWindow.FindName($name)}
 function Set-WidgetAudioVolume {}
 function Stop-WidgetAudio {}
+function Stop-WidgetBubbleVoice {$script:stoppedBubbleVoice=$true}
 . (Join-Path $appDir 'runtime\supervisor-task.ps1')
 . (Join-Path $appDir 'runtime\update-common.ps1')
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $appDir 'runtime\update-ui.ps1'),[Text.Encoding]::UTF8)))
@@ -191,6 +192,12 @@ try{
   $script:settingsMenuUi.Sound.IsChecked=$false
   $script:settingsMenuUi.Sound.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.MenuItem]::ClickEvent))
   Assert-Equal $script:settingsMenuUi.Volume.IsEnabled $false 'Muted sound disables volume control'
+  $script:settingsMenuUi.BubbleVoice.IsChecked=$true
+  $script:settingsMenuUi.BubbleVoice.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.MenuItem]::ClickEvent))
+  Assert-Equal $script:settingsMenuUi.Volume.IsEnabled $true 'Voice can use the volume slider with click sounds disabled'
+  $script:settingsMenuUi.BubbleVoice.IsChecked=$false
+  $script:settingsMenuUi.BubbleVoice.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.MenuItem]::ClickEvent))
+  Assert-Equal $script:stoppedBubbleVoice $true 'Muting bubble voice stops the current audio'
   Write-Output 'PASS: menu modes, conditional topmost, shared row styling, presets and sound controls'
 }finally{
   $poseWindow.Close()

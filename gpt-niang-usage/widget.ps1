@@ -13,6 +13,7 @@ $null=New-Item -ItemType Directory -Path $script:dataDir -Force
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime\characters.ps1'),[Text.Encoding]::UTF8)))
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime\character-gallery.ps1'),[Text.Encoding]::UTF8)))
 . (Join-Path $script:appDir 'runtime\audio.ps1')
+. (Join-Path $script:appDir 'runtime\bubble-voice.ps1')
 . (Join-Path $script:appDir 'runtime\host-layer.ps1')
 . (Join-Path $script:appDir 'runtime\host-follow.ps1')
 . (Join-Path $script:appDir 'runtime\host-ready.ps1')
@@ -144,6 +145,7 @@ try{$settings=Get-Content -LiteralPath $settingsFile -Raw -Encoding UTF8 | Conve
     if(@('left','right')-contains $settings.side){$script:side=$settings.side}
   }else{$script:offsetBottom=0;if($script:offsetRight-gt 18){$script:anchor='free'}}
   if($null-ne $settings.soundOn){$script:soundOn=($settings.soundOn-is [bool] -and $settings.soundOn)}
+  if($settings.bubbleVoiceEnabled-is [bool]){$script:bubbleVoiceEnabled=$settings.bubbleVoiceEnabled}
   if($null-ne $settings.soundVolume){try{$value=[double]$settings.soundVolume;if(![double]::IsNaN($value)-and ![double]::IsInfinity($value)){$script:soundVolume=[Math]::Min(1.0,[Math]::Max(0.0,$value))}}catch{}}
   if($null-ne $settings.bubbleTapAdvance){$script:bubbleTapAdvance=($settings.bubbleTapAdvance-is [bool] -and $settings.bubbleTapAdvance)}
   if($null-ne $settings.hideMenu){$script:hideMenu=($settings.hideMenu-is [bool] -and $settings.hideMenu)}
@@ -164,7 +166,7 @@ function Write-WidgetJson($file,$value){
   $temp=$file+'.tmp';[IO.File]::WriteAllText($temp,($value|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
   if([IO.File]::Exists($file)){[IO.File]::Replace($temp,$file,($file+'.bak'),$true)}else{[IO.File]::Move($temp,$file)}
 }
-function Save-Settings {Write-WidgetJson $settingsFile @{layoutVersion=2;right=$script:offsetRight;left=$script:offsetLeft;bottom=$script:offsetBottom;anchor=$script:anchor;side=$script:side;scale=$script:scale;bubbleScale=$script:bubbleScale;collapsed=$script:collapsed;soundOn=$script:soundOn;soundVolume=$script:soundVolume;bubbleTapAdvance=$script:bubbleTapAdvance;hideMenu=$script:hideMenu;colorMode=$script:colorMode;colorChance=$script:colorChance;colorTextChance=$script:colorTextChance;colorPaused=$script:colorPaused;followHost=$script:followHost;desktopTopmost=$script:desktopTopmost;desktopLeft=$script:desktopLeft;desktopTop=$script:desktopTop;characterId=$script:characterId;autoQuoteEnabled=$script:autoQuoteEnabled;autoQuoteIntervalSeconds=$script:autoQuoteIntervalSeconds;taskCompletionBubble=$script:completionNotificationsEnabled;taskPetEnabled=$script:taskPetEnabled}}
+function Save-Settings {Write-WidgetJson $settingsFile @{layoutVersion=2;right=$script:offsetRight;left=$script:offsetLeft;bottom=$script:offsetBottom;anchor=$script:anchor;side=$script:side;scale=$script:scale;bubbleScale=$script:bubbleScale;collapsed=$script:collapsed;soundOn=$script:soundOn;soundVolume=$script:soundVolume;bubbleTapAdvance=$script:bubbleTapAdvance;hideMenu=$script:hideMenu;colorMode=$script:colorMode;colorChance=$script:colorChance;colorTextChance=$script:colorTextChance;colorPaused=$script:colorPaused;followHost=$script:followHost;desktopTopmost=$script:desktopTopmost;desktopLeft=$script:desktopLeft;desktopTop=$script:desktopTop;characterId=$script:characterId;autoQuoteEnabled=$script:autoQuoteEnabled;autoQuoteIntervalSeconds=$script:autoQuoteIntervalSeconds;taskCompletionBubble=$script:completionNotificationsEnabled;taskPetEnabled=$script:taskPetEnabled;bubbleVoiceEnabled=$script:bubbleVoiceEnabled}}
 function Set-WidgetCharacter([string]$Id,[switch]$NoSave) {
   if($script:widgetMusic -and $script:widgetMusic.Enabled){Stop-WidgetMusic}
   $character=Get-WidgetCharacter $script:appDir $script:dataDir $Id
@@ -423,7 +425,7 @@ function Restart-SceneTtl([int]$renderDelay=0,[long]$now=[DateTimeOffset]::UtcNo
         if($script:collapsed -or $script:bubbleMode-ne 'quota'){$timer.Stop()}
         else{
           $next=if($script:resetTimeMode-eq 'fixed'){$script:sceneDeadline}else{$script:sceneStartedAt+2000}
-          $timer.Interval=[TimeSpan]::FromMilliseconds([Math]::Max(1,$next-$now))
+          $timer.Interval=[TimeSpan]::FromMilliseconds([Math]::Max(100,$next-$now))
         }
       }catch{
         # A transient settings-write failure must not become an unhandled
@@ -440,7 +442,10 @@ function Tick-Scene([long]$now){
   if(!$script:collapsed -and $script:bubbleMode-eq 'completion' -and !(Test-CompletionDisplayAllowed ([bool]$script:window.IsVisible))){Pause-CompletionNotification;return}
   if($script:settingsSizePreview){return}
   if($script:collapsed -or $script:sceneDeadline-le 0){return}
-  if($now-ge $script:sceneDeadline){Hide-Quota;return}
+  if($now-ge $script:sceneDeadline){
+    if(!$script:bubbleVoiceEnabled -or !(Test-WidgetBubbleVoiceActive)){Hide-Quota}
+    return
+  }
   if($script:bubbleMode-eq 'quota' -and $script:resetTimeMode-ne 'fixed' -and $now-ge $script:sceneStartedAt+2000){Set-ResetTimeMode 'fixed' $now}
 }
 function Read-DisplayRequest {
@@ -510,12 +515,33 @@ function Update-BubbleTooltip {
   $script:bubbleTooltipText.Text=[string]$copy
 }
 
-function Switch-Scene([string]$mode){
+function Start-WidgetSceneVoice([int]$DelayMs=0) {
+  if(!$script:bubbleVoiceEnabled -or !$script:window.IsVisible -or $script:collapsed){return}
+  if($script:bubbleMode-ne 'quota'){
+    # Fit-QuoteText can insert line breaks or elide text. Tag keeps the original punctuation.
+    Start-WidgetBubbleVoice ([string]$script:ui.QuoteText.Tag) $DelayMs
+    return
+  }
+  $parts=@($script:ui.Header.Text)
+  foreach($prefix in @('Short','Week')){
+    if($script:ui[$prefix+'Row'].Visibility-ne [Windows.Visibility]::Visible){continue}
+    $parts+=($script:ui[$prefix+'Label'].Text+' '+$script:ui[$prefix+'Left'].Text)
+    $parts+=$script:ui[$prefix+'Reset'].Text
+  }
+  if($script:ui.Status.Visibility-eq [Windows.Visibility]::Visible){$parts+=$script:ui.Status.Text}
+  Start-WidgetBubbleVoice ($parts-join '，') $DelayMs
+}
+
+function Switch-Scene([string]$mode,[string]$Quote){
   if($script:collapsed){return}
+  if($script:bubbleVoiceEnabled){Stop-WidgetBubbleVoice}
   if($script:bubbleMode-eq 'completion' -and $mode-ne 'completion'){Dismiss-CompletionNotification}
   Reset-WidgetAutoQuoteSchedule
   $script:sceneRevision++;$script:bubbleMode=$mode
-  if($mode-eq 'quote'){$script:ui.QuoteText.Text=Get-WidgetBubbleQuote $script:dataDir;Fit-QuoteText}
+  if($mode-eq 'quote'){
+    $script:ui.QuoteText.Text=if($PSBoundParameters.ContainsKey('Quote')){$Quote}else{Get-WidgetBubbleQuote $script:dataDir}
+    Fit-QuoteText
+  }
   if($script:sceneTimer){$script:sceneTimer.Stop()}
   Animate-Value $script:ui.SceneText ([Windows.UIElement]::OpacityProperty) 0 120
   $script:sceneTimer=New-Object Windows.Threading.DispatcherTimer
@@ -525,6 +551,7 @@ function Switch-Scene([string]$mode){
     try{
       if($timer-eq $script:sceneTimer -and !$script:collapsed){
         Apply-Scene;Animate-Value $script:ui.SceneText ([Windows.UIElement]::OpacityProperty) 1 160
+        if($script:bubbleVoiceEnabled){Start-WidgetSceneVoice}
         Restart-SceneTtl 160
       }
     }catch{
@@ -562,12 +589,20 @@ function Show-Quota {
   if($wasCollapsed){Request-Refresh}
 }
 function Show-Quote {Open-WidgetBubble 'quote'}
-function Open-WidgetBubble([ValidateSet('quota','quote','completion')][string]$Mode) {
+function Open-WidgetBubble([ValidateSet('quota','quote','completion')][string]$Mode,[string]$Quote) {
   Reset-WidgetAutoQuoteSchedule
-  if(!$script:collapsed){if($Mode-eq 'quote' -or $script:bubbleMode-ne $Mode){Switch-Scene $Mode}else{Restart-SceneTtl};return}
+  if(!$script:collapsed){
+    if($PSBoundParameters.ContainsKey('Quote')){Switch-Scene $Mode $Quote}
+    elseif($Mode-eq 'quote' -or $script:bubbleMode-ne $Mode){Switch-Scene $Mode}
+    else{Restart-SceneTtl}
+    return
+  }
   $script:bubbleEpoch++;$script:collapsed=$false;$script:sceneRevision++
   $script:bubbleMode=$Mode
-  if($Mode-eq 'quote'){$script:ui.QuoteText.Text=Get-WidgetBubbleQuote $script:dataDir;Fit-QuoteText}
+  if($Mode-eq 'quote'){
+    $script:ui.QuoteText.Text=if($PSBoundParameters.ContainsKey('Quote')){$Quote}else{Get-WidgetBubbleQuote $script:dataDir}
+    Fit-QuoteText
+  }
   if($Mode-eq 'completion'){$script:ui.QuoteText.Text="Codex`n有回复已结束";Fit-QuoteText}
   Apply-Scene
   if($script:sceneTimer){$script:sceneTimer.Stop()}
@@ -584,10 +619,12 @@ function Open-WidgetBubble([ValidateSet('quota','quote','completion')][string]$M
   Set-AnimatedValue $script:ui.SceneText ([Windows.UIElement]::OpacityProperty) 0
   Animate-Value $script:ui.SceneText ([Windows.UIElement]::OpacityProperty) 1 160 360
   $script:ui.Bubble.IsHitTestVisible=$true
+  if($script:bubbleVoiceEnabled){Start-WidgetSceneVoice 360}
   Restart-SceneTtl 520;Save-Settings
 }
 function Hide-Quota([switch]$KeepCompletion) {
   if($script:collapsed){return}
+  if($script:bubbleVoiceEnabled){Stop-WidgetBubbleVoice}
   if($script:bubbleMode-eq 'completion' -and !$KeepCompletion){Dismiss-CompletionNotification}
   Reset-WidgetAutoQuoteSchedule
   $script:collapsed=$true;$script:bubbleEpoch++
@@ -951,6 +988,7 @@ function Stop-WidgetRuntime {
   foreach($timer in @($script:settingsMenuDismissTimer,$script:timer,$script:hostEventTimer,$script:menuTimer,$script:sceneTimer,$script:resetPhaseTimer,$script:closeTimer)){try{if($timer){$timer.Stop()}}catch{}}
   try{Stop-CompletionMonitor;Clear-CompletionNotifications}catch{}
   try{Close-WidgetAudio}catch{}
+  try{Stop-WidgetBubbleVoice}catch{}
   foreach($hook in $script:eventHooks){try{if($hook-ne [IntPtr]::Zero){[GptWidgetNative]::UnhookWinEvent($hook)|Out-Null}}catch{}}
   if($script:worker){try{if(!$script:worker.HasExited){$script:worker.Kill()}}catch{}; $script:worker.Dispose();$script:worker=$null}
   foreach($name in @('runtime.json','presence.json')){
@@ -1056,6 +1094,7 @@ function Tick-Widget {
     if($showWidget){
       Reset-WidgetAutoQuoteSchedule $now
       $script:window.Show()
+      if($script:bubbleVoiceEnabled -and !$script:settingsSizePreview -and $script:sceneDeadline-gt $now){Start-WidgetSceneVoice}
       if(!$script:followHost){
         $script:window.UpdateLayout();$script:desktopPositionPending=$true
         if($script:hostEventTimer){$script:hostEventTimer.Start()}
@@ -1063,6 +1102,7 @@ function Tick-Widget {
       $script:lastPosition=$null;Request-Refresh
     }
   }elseif($script:window.IsVisible){
+    Stop-WidgetBubbleVoice
     Reset-WidgetAutoQuoteSchedule $now
     $script:hostFollower.Suspend()
     $script:context.IsOpen=$false

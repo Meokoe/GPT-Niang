@@ -43,14 +43,11 @@ try{
   $script:window=New-Object Windows.Window;$script:window.Show()
   $script:context=@{IsOpen=$false};$script:ui=@{Girl=(New-Object Windows.Controls.Image);QuoteText=(New-Object Windows.Controls.TextBlock)}
   $script:openCount=0
-  function Open-WidgetBubble($mode){$script:openCount++}
-  function Fit-QuoteText {}
-  $script:appliedScene=0
-  function Apply-Scene {$script:appliedScene++}
+  function Open-WidgetBubble($mode,$quote){$script:openCount++;$script:ui.QuoteText.Text=$quote}
   function Test-WidgetUpdateEditor {return $false}
   $script:taskPetPending=$true;Tick-TaskPet $now $true
   Assert ($script:openCount-eq 1 -and $script:ui.QuoteText.Text) 'Visible idle bubble displays state speech and native motion'
-  Assert ($script:appliedScene-eq 1) 'Task text reapplies its own scene layout and tooltip'
+  Assert ($script:ui.QuoteText.Text-in @('valid','second line')) 'Task opens the quote scene with the actual task text'
   $script:taskPetPending=$true
   Tick-TaskPet ($now+1000) $true
   Assert ($script:openCount-eq 1) 'Speech is throttled'

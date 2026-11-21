@@ -165,10 +165,17 @@ function Initialize-WidgetSettingsMenu {
   $script:context.Items.Remove($script:settingsMenuUi.Colors)
   $script:settingsSubmenus=@($script:settingsSubmenus|Where-Object{$_-ne $script:settingsMenuUi.Colors})
   $script:settingsMenuUi.Audio=Add-SettingsSubmenu '声音与点击' {
-  $script:settingsMenuUi.Sound=Add-SettingsAction '点击音效' {param($sender,$event)$script:soundOn=$sender.IsChecked;if(!$script:soundOn){Stop-WidgetAudio};$script:settingsMenuUi.Volume.IsEnabled=$script:soundOn;Save-Settings} -Checkable -StayOpen -ReturnItem
+  $script:settingsMenuUi.Sound=Add-SettingsAction '点击音效' {param($sender,$event)$script:soundOn=$sender.IsChecked;if(!$script:soundOn){Stop-WidgetAudio};$script:settingsMenuUi.Volume.IsEnabled=$script:soundOn -or $script:bubbleVoiceEnabled;Save-Settings} -Checkable -StayOpen -ReturnItem
+  $script:settingsMenuUi.BubbleVoice=Add-SettingsAction '气泡说话（哔哔啵啵）' {
+    param($sender,$event)
+    $script:bubbleVoiceEnabled=[bool]$sender.IsChecked
+    if(!$script:bubbleVoiceEnabled){Stop-WidgetBubbleVoice}
+    $script:settingsMenuUi.Volume.IsEnabled=$script:soundOn -or $script:bubbleVoiceEnabled
+    Save-Settings
+  } -Checkable -ReturnItem
   $volume=New-SettingsSlider '音量' 0 1 0.1
   $script:settingsMenuUi.Volume=$volume.Slider;$script:settingsMenuUi.VolumeText=$volume.Value;$volume.Slider.Value=$script:soundVolume
-  $volume.Slider.Add_ValueChanged({param($sender,$event)if($script:settingsMenuSync){return};$script:soundVolume=[Math]::Round($sender.Value,2);$script:settingsMenuUi.VolumeText.Text=([Math]::Round($sender.Value*100)).ToString()+'%';Set-WidgetAudioVolume;Save-Settings})
+  $volume.Slider.Add_ValueChanged({param($sender,$event)if($script:settingsMenuSync){return};$script:soundVolume=[Math]::Round($sender.Value,2);$script:settingsMenuUi.VolumeText.Text=([Math]::Round($sender.Value*100)).ToString()+'%';Set-WidgetAudioVolume;if($script:bubbleVoice){Set-WidgetBubbleVoiceVolume};Save-Settings})
   Add-SettingsPanel $volume.Panel
   Add-SettingsDivider
   $script:settingsMenuUi.AudioBuiltin=Add-SettingsAction '使用内置音效' {Invoke-WidgetAudioAction 'builtin'} -Checkable -ReturnItem
@@ -281,6 +288,7 @@ function Update-WidgetSettingsMenu{
     $desktopVisibility=if($script:followHost){[Windows.Visibility]::Collapsed}else{[Windows.Visibility]::Visible}
     $script:settingsMenuUi.Topmost.Visibility=$desktopVisibility;$script:settingsMenuUi.TopmostDivider.Visibility=$desktopVisibility
     $script:settingsMenuUi.Tap.IsChecked=$script:bubbleTapAdvance;$script:settingsMenuUi.Sound.IsChecked=$script:soundOn;$script:settingsMenuUi.Hide.IsChecked=$script:hideMenu
+    $script:settingsMenuUi.BubbleVoice.IsChecked=[bool]$script:bubbleVoiceEnabled
     $script:settingsMenuUi.ColorLinked.IsChecked=$script:colorMode-eq 'linked';$script:settingsMenuUi.ColorRainbow.IsChecked=$script:colorMode-eq 'rainbow';$script:settingsMenuUi.ColorOriginal.IsChecked=$script:colorMode-eq 'original'
     $script:settingsMenuUi.ColorSurprise.IsChecked=$script:colorMode-eq 'surprise';$script:settingsMenuUi.ColorRare.IsChecked=$script:colorMode-eq 'rare';$script:settingsMenuUi.ColorSpecial.IsChecked=$script:colorMode-eq 'special'
     $script:settingsMenuUi.ColorMixed.IsChecked=$script:colorMode-eq 'mixed'
@@ -297,7 +305,7 @@ function Update-WidgetSettingsMenu{
       $script:settingsMenuUi['AudioPreview_'+$phase].IsEnabled=[bool]$entry.configured -and $script:soundOn -and $script:soundVolume-gt 0
       $script:settingsMenuUi['AudioPreview_'+$phase].ToolTip='试听遵循当前声音开关与音量'
     }
-    $script:settingsMenuUi.Volume.Value=$script:soundVolume;$script:settingsMenuUi.Volume.IsEnabled=$script:soundOn;$script:settingsMenuUi.VolumeText.Text=([Math]::Round($script:soundVolume*100)).ToString()+'%'
+    $script:settingsMenuUi.Volume.Value=$script:soundVolume;$script:settingsMenuUi.Volume.IsEnabled=$script:soundOn -or $script:bubbleVoiceEnabled;$script:settingsMenuUi.VolumeText.Text=([Math]::Round($script:soundVolume*100)).ToString()+'%'
     $script:sizeSlider.Value=$script:scale;$script:settingsMenuUi.SizeText.Text=([Math]::Round($script:scale*100)).ToString()+'%';Update-WidgetSizePresets
     $script:bubbleSizeSlider.Value=$script:bubbleScale;$script:settingsMenuUi.BubbleSizeText.Text=([Math]::Round($script:bubbleScale*100)).ToString()+'%'
   }finally{$script:settingsMenuSync=$false}

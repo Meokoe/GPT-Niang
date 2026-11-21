@@ -13,7 +13,7 @@ $ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[r
 if($errors.Count){throw ($errors|Out-String)}
 $ease=$ast.Find({param($node)$node-is [Management.Automation.Language.CommandAst] -and $node.GetCommandName()-eq 'Add-Type' -and $node.Extent.Text.Contains('class GptBezierEase')},$true)
 . ([ScriptBlock]::Create($ease.Extent.Text))
-foreach($name in @('Set-AnimatedValue','Animate-Value','Set-BubbleState','Get-WidgetLayoutScale','Set-WidgetIndependentLayout','Reset-Label','Format-ResetTime','Format-ResetDisplay','Get-QuotaWindowLabel','Get-QuotaRows','Set-ResetTimeMode','Restart-SceneTtl','Tick-Scene','Apply-Scene','Update-BubbleTooltip','Switch-Scene','Show-Quote','Show-Quota','Open-WidgetBubble','Hide-Quota','Tick-WidgetAutoQuote','Write-WidgetJson','Save-Settings','Read-DisplayRequest','Request-Refresh','Next-Bubble','Click-Character')){
+foreach($name in @('Set-AnimatedValue','Animate-Value','Set-BubbleState','Get-WidgetLayoutScale','Set-WidgetIndependentLayout','Reset-Label','Format-ResetTime','Format-ResetDisplay','Get-QuotaWindowLabel','Get-QuotaRows','Set-ResetTimeMode','Restart-SceneTtl','Tick-Scene','Apply-Scene','Update-BubbleTooltip','Start-WidgetSceneVoice','Switch-Scene','Show-Quote','Show-Quota','Open-WidgetBubble','Hide-Quota','Tick-WidgetAutoQuote','Write-WidgetJson','Save-Settings','Read-DisplayRequest','Request-Refresh','Next-Bubble','Click-Character')){
   $definition=$ast.Find({param($node)$node-is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name-eq $name},$true)
   if(!$definition){throw ('Missing real widget function: '+$name)}
   . ([ScriptBlock]::Create($definition.Extent.Text))
@@ -146,6 +146,31 @@ try{
   Set-WidgetAutoQuoteSettings $false 900
   Initialize-WidgetAutoQuoteSettings (Get-Content -LiteralPath $settingsFile -Raw -Encoding UTF8|ConvertFrom-Json)
   Assert (!$script:autoQuoteEnabled -and $script:autoQuoteIntervalSeconds-eq 900) 'Disabling and restarting must retain the chosen interval'
+  Hide-Quota
+  $script:bubbleVoiceEnabled=$true;$script:spoken=@();$script:voiceActive=$false
+  function Start-WidgetBubbleVoice($text,$delay){$script:spoken+=@($text);$script:voiceActive=$true}
+  function Stop-WidgetBubbleVoice {$script:voiceActive=$false}
+  function Test-WidgetBubbleVoiceActive {return $script:voiceActive}
+  Open-WidgetBubble 'quote' '真的吗？太好了！等一下....'
+  Assert ($script:spoken.Count-eq 1 -and $script:spoken[0]-ceq '真的吗？太好了！等一下....') 'The opened task quote sends its original punctuation exactly once'
+  Apply-Scene
+  Assert ($script:spoken.Count-eq 1) 'Reapplying the layout does not replay speech'
+  Tick-Scene $script:sceneDeadline
+  Assert (!$script:collapsed) 'An active voice keeps the scene open past the default deadline'
+  Stop-WidgetBubbleVoice
+  Tick-Scene $script:sceneDeadline
+  Assert $script:collapsed 'Natural timeout can close after speech ends'
+  Open-WidgetBubble 'completion'
+  Assert ($script:spoken[-1]-ceq "Codex`n有回复已结束") 'Completion reads the actual notification'
+  Hide-Quota -KeepCompletion
+  Assert (!$script:voiceActive) 'Closing a bubble stops voice immediately'
+  $script:ui.ShortRow.Visibility='Visible';$script:ui.WeekRow.Visibility='Collapsed'
+  $script:ui.ShortLabel.Text='5 小时';$script:ui.ShortLeft.Text='42%';$script:ui.WeekLabel.Text='隐藏额度'
+  Open-WidgetBubble 'quota'
+  Assert ($script:spoken[-1]-like '*5 小时 42%*' -and $script:spoken[-1]-notlike '*隐藏额度*') 'Quota reads only visible rows'
+  $countBeforeClick=$script:spoken.Count
+  Click-Character;Drain-Wpf 300
+  Assert ($script:spoken.Count-eq ($countBeforeClick+1) -and $script:spoken[-1]-ceq $script:ui.QuoteText.Tag) 'Clicking the character reads the newly displayed quote once'
   Write-Output ('PASS: '+$script:checks+' automatic quote checks, including native WPF open/close animation, saved personal quotes, refresh isolation, resume, manual takeover and retained settings')
 }finally{
   foreach($timer in @($script:sceneTimer,$script:resetPhaseTimer,$script:closeTimer)){if($timer){$timer.Stop()}}

@@ -46,8 +46,7 @@ function Tick-TaskPet([long]$Now,[bool]$Visible) {
   if(!$Visible -or !$script:window.IsVisible -or [bool]$script:drag -or $script:context.IsOpen -or $script:settingsSizePreview -or (Test-WidgetUpdateEditor) -or !$script:collapsed -or $script:completionPending){return}
   if(!$script:taskPetPending -or $Now-$script:taskPetShownAt-lt 15000){return}
   $script:taskPetPending=$false;$script:taskPetShownAt=$Now
-  Open-WidgetBubble 'quote'
-  $script:ui.QuoteText.Text=Get-TaskPetQuote $script:taskPetState;Fit-QuoteText;Apply-Scene
+  Open-WidgetBubble 'quote' (Get-TaskPetQuote $script:taskPetState)
   # A short native WPF motion leaves drag, scaling and music transforms intact.
   if(!$script:widgetMusic -or !$script:widgetMusic.Enabled){
     $motion=[Windows.Media.TranslateTransform]::new();$script:ui.Girl.RenderTransform=$motion
