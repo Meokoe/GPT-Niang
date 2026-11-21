@@ -145,7 +145,7 @@ try{$settings=Get-Content -LiteralPath $settingsFile -Raw -Encoding UTF8 | Conve
     if(@('left','right')-contains $settings.side){$script:side=$settings.side}
   }else{$script:offsetBottom=0;if($script:offsetRight-gt 18){$script:anchor='free'}}
   if($null-ne $settings.soundOn){$script:soundOn=($settings.soundOn-is [bool] -and $settings.soundOn)}
-  if($settings.bubbleVoiceEnabled-is [bool]){$script:bubbleVoiceEnabled=$settings.bubbleVoiceEnabled}
+  Initialize-WidgetBubbleVoiceSettings $settings
   if($null-ne $settings.soundVolume){try{$value=[double]$settings.soundVolume;if(![double]::IsNaN($value)-and ![double]::IsInfinity($value)){$script:soundVolume=[Math]::Min(1.0,[Math]::Max(0.0,$value))}}catch{}}
   if($null-ne $settings.bubbleTapAdvance){$script:bubbleTapAdvance=($settings.bubbleTapAdvance-is [bool] -and $settings.bubbleTapAdvance)}
   if($null-ne $settings.hideMenu){$script:hideMenu=($settings.hideMenu-is [bool] -and $settings.hideMenu)}
@@ -166,7 +166,7 @@ function Write-WidgetJson($file,$value){
   $temp=$file+'.tmp';[IO.File]::WriteAllText($temp,($value|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
   if([IO.File]::Exists($file)){[IO.File]::Replace($temp,$file,($file+'.bak'),$true)}else{[IO.File]::Move($temp,$file)}
 }
-function Save-Settings {Write-WidgetJson $settingsFile @{layoutVersion=2;right=$script:offsetRight;left=$script:offsetLeft;bottom=$script:offsetBottom;anchor=$script:anchor;side=$script:side;scale=$script:scale;bubbleScale=$script:bubbleScale;collapsed=$script:collapsed;soundOn=$script:soundOn;soundVolume=$script:soundVolume;bubbleTapAdvance=$script:bubbleTapAdvance;hideMenu=$script:hideMenu;colorMode=$script:colorMode;colorChance=$script:colorChance;colorTextChance=$script:colorTextChance;colorPaused=$script:colorPaused;followHost=$script:followHost;desktopTopmost=$script:desktopTopmost;desktopLeft=$script:desktopLeft;desktopTop=$script:desktopTop;characterId=$script:characterId;autoQuoteEnabled=$script:autoQuoteEnabled;autoQuoteIntervalSeconds=$script:autoQuoteIntervalSeconds;taskCompletionBubble=$script:completionNotificationsEnabled;taskPetEnabled=$script:taskPetEnabled;bubbleVoiceEnabled=$script:bubbleVoiceEnabled}}
+function Save-Settings {Write-WidgetJson $settingsFile @{layoutVersion=2;right=$script:offsetRight;left=$script:offsetLeft;bottom=$script:offsetBottom;anchor=$script:anchor;side=$script:side;scale=$script:scale;bubbleScale=$script:bubbleScale;collapsed=$script:collapsed;soundOn=$script:soundOn;soundVolume=$script:soundVolume;bubbleTapAdvance=$script:bubbleTapAdvance;hideMenu=$script:hideMenu;colorMode=$script:colorMode;colorChance=$script:colorChance;colorTextChance=$script:colorTextChance;colorPaused=$script:colorPaused;followHost=$script:followHost;desktopTopmost=$script:desktopTopmost;desktopLeft=$script:desktopLeft;desktopTop=$script:desktopTop;characterId=$script:characterId;autoQuoteEnabled=$script:autoQuoteEnabled;autoQuoteIntervalSeconds=$script:autoQuoteIntervalSeconds;taskCompletionBubble=$script:completionNotificationsEnabled;taskPetEnabled=$script:taskPetEnabled;bubbleVoiceEnabled=$script:bubbleVoiceEnabled;bubbleVoiceStyle=$script:bubbleVoiceStyle;bubbleVoiceSpeed=$script:bubbleVoiceSpeed}}
 function Set-WidgetCharacter([string]$Id,[switch]$NoSave) {
   if($script:widgetMusic -and $script:widgetMusic.Enabled){Stop-WidgetMusic}
   $character=Get-WidgetCharacter $script:appDir $script:dataDir $Id

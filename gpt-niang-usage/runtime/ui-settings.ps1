@@ -173,6 +173,30 @@ function Initialize-WidgetSettingsMenu {
     $script:settingsMenuUi.Volume.IsEnabled=$script:soundOn -or $script:bubbleVoiceEnabled
     Save-Settings
   } -Checkable -ReturnItem
+  $script:settingsMenuUi.VoiceStyle=Add-SettingsSubmenu '气泡音色' {
+    $script:settingsMenuUi.VoiceStyles=@()
+    foreach($entry in @(@{id='fish';name='大肥鱼'},@{id='lumo';name='路墨'})){
+      $choice=Add-SettingsAction $entry.name {
+        param($sender,$event)
+        $script:bubbleVoiceStyle=[string]$sender.Tag
+        Update-WidgetSettingsMenu
+        Save-Settings
+      } -Checkable -ReturnItem
+      $choice.Tag=$entry.id;$choice.Uid='radio'
+      $script:settingsMenuUi.VoiceStyles+=,$choice
+    }
+  } -ReturnItem
+  $speed=New-SettingsSlider '气泡语速' 50 200 1
+  $script:settingsMenuUi.VoiceSpeed=$speed.Slider
+  $script:settingsMenuUi.VoiceSpeedText=$speed.Value
+  $speed.Slider.Add_ValueChanged({
+    param($sender,$event)
+    if($script:settingsMenuSync){return}
+    $script:bubbleVoiceSpeed=[int]$sender.Value
+    $script:settingsMenuUi.VoiceSpeedText.Text=[string]$script:bubbleVoiceSpeed+'%'
+    Save-Settings
+  })
+  Add-SettingsPanel $speed.Panel
   $volume=New-SettingsSlider '音量' 0 1 0.1
   $script:settingsMenuUi.Volume=$volume.Slider;$script:settingsMenuUi.VolumeText=$volume.Value;$volume.Slider.Value=$script:soundVolume
   $volume.Slider.Add_ValueChanged({param($sender,$event)if($script:settingsMenuSync){return};$script:soundVolume=[Math]::Round($sender.Value,2);$script:settingsMenuUi.VolumeText.Text=([Math]::Round($sender.Value*100)).ToString()+'%';Set-WidgetAudioVolume;if($script:bubbleVoice){Set-WidgetBubbleVoiceVolume};Save-Settings})
@@ -289,6 +313,9 @@ function Update-WidgetSettingsMenu{
     $script:settingsMenuUi.Topmost.Visibility=$desktopVisibility;$script:settingsMenuUi.TopmostDivider.Visibility=$desktopVisibility
     $script:settingsMenuUi.Tap.IsChecked=$script:bubbleTapAdvance;$script:settingsMenuUi.Sound.IsChecked=$script:soundOn;$script:settingsMenuUi.Hide.IsChecked=$script:hideMenu
     $script:settingsMenuUi.BubbleVoice.IsChecked=[bool]$script:bubbleVoiceEnabled
+    foreach($choice in $script:settingsMenuUi.VoiceStyles){$choice.IsChecked=$choice.Tag-eq $script:bubbleVoiceStyle}
+    $script:settingsMenuUi.VoiceSpeed.Value=$script:bubbleVoiceSpeed
+    $script:settingsMenuUi.VoiceSpeedText.Text=[string]$script:bubbleVoiceSpeed+'%'
     $script:settingsMenuUi.ColorLinked.IsChecked=$script:colorMode-eq 'linked';$script:settingsMenuUi.ColorRainbow.IsChecked=$script:colorMode-eq 'rainbow';$script:settingsMenuUi.ColorOriginal.IsChecked=$script:colorMode-eq 'original'
     $script:settingsMenuUi.ColorSurprise.IsChecked=$script:colorMode-eq 'surprise';$script:settingsMenuUi.ColorRare.IsChecked=$script:colorMode-eq 'rare';$script:settingsMenuUi.ColorSpecial.IsChecked=$script:colorMode-eq 'special'
     $script:settingsMenuUi.ColorMixed.IsChecked=$script:colorMode-eq 'mixed'

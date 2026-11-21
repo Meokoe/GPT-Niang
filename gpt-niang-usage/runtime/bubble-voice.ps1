@@ -1,5 +1,16 @@
 $script:bubbleVoiceEnabled = $true
+$script:bubbleVoiceStyle = 'fish'
+$script:bubbleVoiceSpeed = 100
 $script:bubbleVoice = $null
+
+function Initialize-WidgetBubbleVoiceSettings($Settings) {
+    if ($Settings.bubbleVoiceEnabled -is [bool]) { $script:bubbleVoiceEnabled = $Settings.bubbleVoiceEnabled }
+    if ($Settings.bubbleVoiceStyle -cin @('fish','lumo')) { $script:bubbleVoiceStyle = $Settings.bubbleVoiceStyle }
+    $speed = 0
+    if ([int]::TryParse([string]$Settings.bubbleVoiceSpeed, [ref]$speed) -and $speed -ge 50 -and $speed -le 200) {
+        $script:bubbleVoiceSpeed = $speed
+    }
+}
 
 function Stop-WidgetBubbleVoice {
     $voice = $script:bubbleVoice
@@ -41,6 +52,7 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $node
     $start.Arguments = '"' + (Join-Path $script:appDir 'runtime\bubble-voice.mjs') + '" "' + $path + '"'
+    $start.Arguments += ' --voice ' + $script:bubbleVoiceStyle + ' --speed ' + $script:bubbleVoiceSpeed
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
     $start.RedirectStandardInput = $true
@@ -53,6 +65,7 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
         Timer = $timer
         Clock = [Diagnostics.Stopwatch]::StartNew()
         DelayMs = $DelayMs
+        EndAfterMs = 5000
     }
     try {
         $script:bubbleVoice.Process = [Diagnostics.Process]::Start($start)
@@ -66,7 +79,7 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
             try {
                 # A hung synthesizer or audio device must not keep a bubble open.
                 $elapsed = $voice.Clock.Elapsed.TotalMilliseconds
-                if ($elapsed -ge 65000 -or ($voice.Process -and $elapsed -ge 4000 -and !$voice.Process.HasExited)) {
+                if ($elapsed -ge $voice.EndAfterMs) {
                     Stop-WidgetBubbleVoice
                     return
                 }
@@ -75,6 +88,9 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
                 $voice.Process.Dispose()
                 $voice.Process = $null
                 if (!$ok) { Stop-WidgetBubbleVoice; return }
+                # PCM is 44.1 kHz mono, 16-bit. Allow time for the selected speed and audio startup.
+                $waveBytes = ([IO.FileInfo]::new($voice.Path)).Length - 44
+                $voice.EndAfterMs = $elapsed + [Math]::Max(0, $waveBytes / 88.2) + 5000
                 # Use WPF's player so click sounds and bubble speech have separate playback.
                 $voice.Player = [Windows.Media.MediaPlayer]::new()
                 $voice.Player.Volume = Get-WidgetAudioVolume

@@ -5,12 +5,14 @@ $appDir=Split-Path $TestRoot -Parent
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $appDir 'runtime\ui-settings.ps1'),[Text.Encoding]::UTF8)))
 . (Join-Path $appDir 'runtime\quotes.ps1')
 . (Join-Path $appDir 'runtime\audio.ps1')
+. (Join-Path $appDir 'runtime\bubble-voice.ps1')
+Initialize-WidgetBubbleVoiceSettings @{bubbleVoiceEnabled=$false;bubbleVoiceStyle='fish';bubbleVoiceSpeed=125}
 Initialize-WidgetAutoQuoteSettings $null
 . (Join-Path $appDir 'runtime\completion-notifications.ps1')
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $appDir 'runtime/music.ps1'),[Text.Encoding]::UTF8)))
 Initialize-CompletionNotificationState $null
 function Assert-Equal($actual,$expected,[string]$message){if($actual-ne $expected){throw "$message : expected '$expected', got '$actual'"}}
-function Save-Settings {}
+function Save-Settings {$script:savedVoice=@($script:bubbleVoiceStyle,$script:bubbleVoiceSpeed)}
 function Set-WidgetFollowHost([bool]$Follow){$script:followHost=$Follow}
 function Set-WidgetMenuBounds {}
 function Position-WidgetMenuToHost {}
@@ -198,6 +200,12 @@ try{
   $script:settingsMenuUi.BubbleVoice.IsChecked=$false
   $script:settingsMenuUi.BubbleVoice.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.MenuItem]::ClickEvent))
   Assert-Equal $script:stoppedBubbleVoice $true 'Muting bubble voice stops the current audio'
+  Assert-Equal $script:settingsMenuUi.VoiceSpeed.Value 125 'Saved speech speed appears in the slider'
+  $lumo=$script:settingsMenuUi.VoiceStyles | Where-Object {$_.Tag-eq 'lumo'}
+  $lumo.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.MenuItem]::ClickEvent))
+  Assert-Equal $lumo.IsChecked $true 'Selected voice appears checked'
+  $script:settingsMenuUi.VoiceSpeed.Value=160
+  Assert-Equal ($script:savedVoice -join ',') 'lumo,160' 'Voice selection and speed are saved by the menu'
   Write-Output 'PASS: menu modes, conditional topmost, shared row styling, presets and sound controls'
 }finally{
   $poseWindow.Close()
