@@ -1,5 +1,19 @@
+import {createHash, randomUUID} from 'node:crypto';
+import {mkdir, readFile, rename, stat, unlink, writeFile} from 'node:fs/promises';
+import {homedir} from 'node:os';
+import {dirname, join} from 'node:path';
+
 const endpoint = 'http://127.0.0.1:9880/tts';
 const maxVoiceBytes = 12 * 1024 * 1024;
+
+function cachePath(text, rate) {
+  const root = process.env.KLEE_BUBBLE_CACHE_DIR || join(
+    process.env.LOCALAPPDATA || process.env.XDG_CACHE_HOME || join(homedir(), '.cache'),
+    'KleeTTS', 'klee-v2-ref005-cache-v1',
+  );
+  const key = createHash('sha256').update(JSON.stringify([text, rate])).digest('hex');
+  return join(root, key + '.wav');
+}
 
 function readPCM(wav) {
   if (wav.length < 44 || wav.toString('ascii', 0, 4) !== 'RIFF'
@@ -46,11 +60,11 @@ function speechOnsets({rate, data}) {
   return starts;
 }
 
-export async function requestKleeSpeech(text, rate, withTimings, request = fetch) {
+export async function requestKleeSpeech(text, rate, withTimings, request = fetch, timeoutMs = 15000) {
   const response = await request(endpoint, {
     method: 'POST',
     redirect: 'error',
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {'content-type': 'application/json'},
     body: JSON.stringify({
       text, text_lang: 'auto',
@@ -73,4 +87,44 @@ export async function requestKleeSpeech(text, rate, withTimings, request = fetch
   const wave = Buffer.concat(chunks, size);
   const pcm = readPCM(wave);
   return {wave, timings: withTimings ? speechOnsets(pcm) : []};
+}
+
+async function readCachedWave(path) {
+  try {
+    const info = await stat(path);
+    if (!info.isFile() || info.size > maxVoiceBytes) return null;
+    const wave = await readFile(path);
+    return {wave, pcm: readPCM(wave)};
+  } catch {
+    return null;
+  }
+}
+
+export async function getKleeSpeech(text, rate, withTimings, request = fetch) {
+  const cached = await readCachedWave(cachePath(text, rate));
+  if (cached) {
+    return {wave: cached.wave, timings: withTimings ? speechOnsets(cached.pcm) : []};
+  }
+  return requestKleeSpeech(text, rate, withTimings, request);
+}
+
+export async function cacheKleeSpeech(text, rate, request = fetch) {
+  const path = cachePath(text, rate);
+  if (await readCachedWave(path)) return false;
+  const {wave} = await requestKleeSpeech(text, rate, false, request, 90000);
+  const {data} = readPCM(wave);
+  let audible = false;
+  for (let i = 0; i < data.length && !audible; i += 2) {
+    audible = Math.abs(data.readInt16LE(i)) >= 128;
+  }
+  if (!audible) throw new Error('Klee TTS returned silent audio');
+  await mkdir(dirname(path), {recursive: true});
+  const temporary = path + '.' + randomUUID() + '.tmp';
+  try {
+    await writeFile(temporary, wave, {flag: 'wx'});
+    await rename(temporary, path);
+  } finally {
+    await unlink(temporary).catch(() => {});
+  }
+  return true;
 }

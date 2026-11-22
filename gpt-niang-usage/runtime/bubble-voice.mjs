@@ -1,7 +1,7 @@
 import {writeFileSync} from 'node:fs';
 import {parseArgs} from 'node:util';
 import {synth, toWav, VOICES} from './bibibobo/bibibobo.js';
-import {requestKleeSpeech} from './klee-voice.mjs';
+import {getKleeSpeech} from './klee-voice.mjs';
 
 const {values, positionals} = parseArgs({
   allowPositionals: true,
@@ -35,7 +35,7 @@ let wave;
 let timings = [];
 if (voice === 'klee') {
   try {
-    ({wave, timings} = await requestKleeSpeech(text, rate, Boolean(values.timings)));
+    ({wave, timings} = await getKleeSpeech(text, rate, Boolean(values.timings)));
   } catch {
     process.stderr.write('KLEE_UNAVAILABLE\n');
     process.exit(1);

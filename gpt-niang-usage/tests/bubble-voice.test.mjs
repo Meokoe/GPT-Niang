@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, readFileSync, readdirSync, rmdirSync, rmSync, unlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {synth, toWav, VOICES} from '../runtime/bibibobo/bibibobo.js';
-import {requestKleeSpeech} from '../runtime/klee-voice.mjs';
+import {cacheKleeSpeech, getKleeSpeech, requestKleeSpeech} from '../runtime/klee-voice.mjs';
 
 const cli = fileURLToPath(new URL('../runtime/bubble-voice.mjs', import.meta.url));
 function generate(text, ...options) {
@@ -103,4 +103,28 @@ test('an unavailable Klee service never produces bibibobo audio', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr.toString(), /KLEE_UNAVAILABLE/);
   assert.equal(result.stdout.length, 0);
+});
+
+test('prepared Klee bubbles play offline at their rendered speed and keep punctuation', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gpt-niang-klee-cache-'));
+  const previous = process.env.KLEE_BUBBLE_CACHE_DIR;
+  process.env.KLEE_BUBBLE_CACHE_DIR = dir;
+  const offline = () => { throw new Error('Offline for this test'); };
+  try {
+    const line = '准备好了吗？';
+    const pcm = new Float32Array(32000);
+    pcm.fill(0.25, 3200, 4800);
+    const wave = Buffer.from(toWav(pcm, 32000));
+    assert.equal(await cacheKleeSpeech(line, 1.25, async () => new Response(wave)), true);
+    assert.equal(await cacheKleeSpeech(line, 1.25, offline), false);
+    assert.deepEqual(await getKleeSpeech(line, 1.25, true, offline), {wave, timings: [100]});
+    assert.deepEqual(generate(line, '--voice', 'klee', '--speed', '125'), wave);
+    await assert.rejects(getKleeSpeech(line, 1, false, offline), /Offline/);
+    await assert.rejects(getKleeSpeech('准备好了吗！', 1.25, false, offline), /Offline/);
+  } finally {
+    if (previous === undefined) delete process.env.KLEE_BUBBLE_CACHE_DIR;
+    else process.env.KLEE_BUBBLE_CACHE_DIR = previous;
+    for (const file of readdirSync(dir)) unlinkSync(join(dir, file));
+    rmdirSync(dir);
+  }
 });
