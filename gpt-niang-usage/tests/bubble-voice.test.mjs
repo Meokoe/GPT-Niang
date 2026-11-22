@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {synth, toWav, VOICES} from '../runtime/bibibobo/bibibobo.js';
+import {requestKleeSpeech} from '../runtime/klee-voice.mjs';
 
 const cli = fileURLToPath(new URL('../runtime/bubble-voice.mjs', import.meta.url));
 function generate(text, ...options) {
@@ -67,4 +68,26 @@ test('one visual cue is emitted at each synthesized syllable, with sentence paus
   } finally {
     rmSync(dir, {recursive: true, force: true});
   }
+});
+
+test('Klee sends the original bubble and speed to the local service and follows the returned WAV clock', async () => {
+  const pcm = new Float32Array(32000);
+  pcm.fill(0.25, 3200, 4800);
+  pcm.fill(0.3, 12800, 14400);
+  const wave = Buffer.from(toWav(pcm, 32000));
+  const line = 'こんにちは……准备好了？';
+  const result = await requestKleeSpeech(line, 1.6, true, async (url, options) => {
+    assert.equal(url, 'http://127.0.0.1:9880/tts');
+    assert.equal(options.method, 'POST');
+    assert.equal(options.redirect, 'error');
+    const body = JSON.parse(options.body);
+    assert.equal(body.text, line);
+    assert.equal(body.speed_factor, 1.6);
+    assert.equal(body.ref_audio_path, 'data/klee/audio/klee_005.wav');
+    assert.equal(body.media_type, 'wav');
+    return new Response(wave);
+  });
+  assert.deepEqual(result.wave, wave);
+  assert.deepEqual(result.timings, [100, 400]);
+  await assert.rejects(requestKleeSpeech(line, 1, true, async () => new Response('not a wave')));
 });

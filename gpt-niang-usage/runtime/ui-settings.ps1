@@ -175,7 +175,7 @@ function Initialize-WidgetSettingsMenu {
   } -Checkable -ReturnItem
   $script:settingsMenuUi.VoiceStyle=Add-SettingsSubmenu '气泡音色' {
     $script:settingsMenuUi.VoiceStyles=@()
-    foreach($entry in @(@{id='fish';name='大肥鱼'},@{id='lumo';name='路墨'})){
+    foreach($entry in @(@{id='fish';name='大肥鱼'},@{id='lumo';name='路墨'},@{id='klee';name='可莉（本机 TTS）'})){
       $choice=Add-SettingsAction $entry.name {
         param($sender,$event)
         $script:bubbleVoiceStyle=[string]$sender.Tag
@@ -313,7 +313,12 @@ function Update-WidgetSettingsMenu{
     $script:settingsMenuUi.Topmost.Visibility=$desktopVisibility;$script:settingsMenuUi.TopmostDivider.Visibility=$desktopVisibility
     $script:settingsMenuUi.Tap.IsChecked=$script:bubbleTapAdvance;$script:settingsMenuUi.Sound.IsChecked=$script:soundOn;$script:settingsMenuUi.Hide.IsChecked=$script:hideMenu
     $script:settingsMenuUi.BubbleVoice.IsChecked=[bool]$script:bubbleVoiceEnabled
-    foreach($choice in $script:settingsMenuUi.VoiceStyles){$choice.IsChecked=$choice.Tag-eq $script:bubbleVoiceStyle}
+    foreach($choice in $script:settingsMenuUi.VoiceStyles){
+      $choice.IsChecked=$choice.Tag-eq $script:bubbleVoiceStyle
+      if($choice.Tag-eq 'klee'){
+        $choice.ToolTip=if($script:bubbleVoiceKleeUnavailable){'上次未能连接可莉语音，已用大肥鱼播放。'}else{'通过本机可莉 TTS 服务朗读气泡。'}
+      }
+    }
     $script:settingsMenuUi.VoiceSpeed.Value=$script:bubbleVoiceSpeed
     $script:settingsMenuUi.VoiceSpeedText.Text=[string]$script:bubbleVoiceSpeed+'%'
     $script:settingsMenuUi.ColorLinked.IsChecked=$script:colorMode-eq 'linked';$script:settingsMenuUi.ColorRainbow.IsChecked=$script:colorMode-eq 'rainbow';$script:settingsMenuUi.ColorOriginal.IsChecked=$script:colorMode-eq 'original'

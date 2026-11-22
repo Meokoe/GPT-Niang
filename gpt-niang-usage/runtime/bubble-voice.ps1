@@ -1,11 +1,12 @@
 $script:bubbleVoiceEnabled = $true
 $script:bubbleVoiceStyle = 'fish'
 $script:bubbleVoiceSpeed = 100
+$script:bubbleVoiceKleeUnavailable = $false
 $script:bubbleVoice = $null
 
 function Initialize-WidgetBubbleVoiceSettings($Settings) {
     if ($Settings.bubbleVoiceEnabled -is [bool]) { $script:bubbleVoiceEnabled = $Settings.bubbleVoiceEnabled }
-    if ($Settings.bubbleVoiceStyle -cin @('fish','lumo')) { $script:bubbleVoiceStyle = $Settings.bubbleVoiceStyle }
+    if ($Settings.bubbleVoiceStyle -cin @('fish','lumo','klee')) { $script:bubbleVoiceStyle = $Settings.bubbleVoiceStyle }
     $speed = 0
     if ([int]::TryParse([string]$Settings.bubbleVoiceSpeed, [ref]$speed) -and $speed -ge 50 -and $speed -le 200) {
         $script:bubbleVoiceSpeed = $speed
@@ -84,6 +85,7 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
     $start.RedirectStandardInput = $true
+    $start.RedirectStandardError = $true
     $timer = [Windows.Threading.DispatcherTimer]::new()
     $timer.Interval = [TimeSpan]::FromMilliseconds(40)
     $script:bubbleVoice = @{
@@ -91,12 +93,13 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
         TimingPath = $timingPath
         Timings = @()
         BeatIndex = -1
+        RequestedStyle = $script:bubbleVoiceStyle
         Process = $null
         Player = $null
         Timer = $timer
         Clock = [Diagnostics.Stopwatch]::StartNew()
         DelayMs = $DelayMs
-        EndAfterMs = 5000
+        EndAfterMs = if ($script:bubbleVoiceStyle -eq 'klee') { 18000 } else { 5000 }
     }
     try {
         $script:bubbleVoice.Process = [Diagnostics.Process]::Start($start)
@@ -120,6 +123,9 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
                 }
                 if (!$voice.Process.HasExited -or $elapsed -lt $voice.DelayMs) { return }
                 $ok = $voice.Process.ExitCode -eq 0 -and [IO.File]::Exists($voice.Path)
+                if ($voice.RequestedStyle -eq 'klee') {
+                    $script:bubbleVoiceKleeUnavailable = $voice.Process.StandardError.ReadToEnd() -match 'KLEE_UNAVAILABLE'
+                }
                 $voice.Process.Dispose()
                 $voice.Process = $null
                 if (!$ok) { Stop-WidgetBubbleVoice; return }
@@ -127,12 +133,17 @@ function Start-WidgetBubbleVoice([string]$Text, [int]$DelayMs = 0) {
                     $timings = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($voice.TimingPath)) -ErrorAction Stop
                     $voice.Timings = [double[]]$timings
                 } catch {}
-                # PCM is 44.1 kHz mono, 16-bit. Allow time for the selected speed and audio startup.
-                $waveBytes = ([IO.FileInfo]::new($voice.Path)).Length - 44
-                $voice.EndAfterMs = $elapsed + [Math]::Max(0, $waveBytes / 88.2) + 5000
+                $voice.EndAfterMs = $elapsed + 5000
                 # Use WPF's player so click sounds and bubble speech have separate playback.
                 $voice.Player = [Windows.Media.MediaPlayer]::new()
                 $voice.Player.Volume = Get-WidgetAudioVolume
+                $voice.Player.Add_MediaOpened({
+                    param($player, $event)
+                    $current = $script:bubbleVoice
+                    if ($current -and $player -eq $current.Player -and $player.NaturalDuration.HasTimeSpan) {
+                        $current.EndAfterMs = $current.Clock.Elapsed.TotalMilliseconds + $player.NaturalDuration.TimeSpan.TotalMilliseconds + 5000
+                    }
+                })
                 $voice.Player.Add_MediaEnded({
                     param($player, $event)
                     if ($script:bubbleVoice -and $player -eq $script:bubbleVoice.Player) { Stop-WidgetBubbleVoice }

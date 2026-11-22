@@ -27,6 +27,7 @@
   "runtime/audio-import.mjs",
   "runtime/bubble-voice.ps1",
   "runtime/bubble-voice.mjs",
+  "runtime/klee-voice.mjs",
   "runtime/bibibobo/bibibobo.js",
   "runtime/bibibobo/LICENSE",
   "runtime/bibibobo/UPSTREAM.md",
