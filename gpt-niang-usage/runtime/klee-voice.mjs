@@ -89,19 +89,29 @@ export async function requestKleeSpeech(text, rate, withTimings, request = fetch
   return {wave, timings: withTimings ? speechOnsets(pcm) : []};
 }
 
-async function readCachedWave(path) {
+function hasSpeech({data, rate: sampleRate}, text, rate) {
+  const han = (text.match(/\p{Script=Han}/gu) || []).length;
+  let remaining = Math.ceil(sampleRate * Math.max(0.045, han * 0.028 / rate));
+  for (let i = 0; i < data.length; i += 2) {
+    if (Math.abs(data.readInt16LE(i)) >= 128 && --remaining === 0) return true;
+  }
+  return false;
+}
+
+async function readCachedWave(path, text, rate) {
   try {
     const info = await stat(path);
     if (!info.isFile() || info.size > maxVoiceBytes) return null;
     const wave = await readFile(path);
-    return {wave, pcm: readPCM(wave)};
+    const pcm = readPCM(wave);
+    return hasSpeech(pcm, text, rate) ? {wave, pcm} : null;
   } catch {
     return null;
   }
 }
 
 export async function getKleeSpeech(text, rate, withTimings, request = fetch) {
-  const cached = await readCachedWave(cachePath(text, rate));
+  const cached = await readCachedWave(cachePath(text, rate), text, rate);
   if (cached) {
     return {wave: cached.wave, timings: withTimings ? speechOnsets(cached.pcm) : []};
   }
@@ -110,14 +120,9 @@ export async function getKleeSpeech(text, rate, withTimings, request = fetch) {
 
 export async function cacheKleeSpeech(text, rate, request = fetch) {
   const path = cachePath(text, rate);
-  if (await readCachedWave(path)) return false;
+  if (await readCachedWave(path, text, rate)) return false;
   const {wave} = await requestKleeSpeech(text, rate, false, request, 90000);
-  const {data} = readPCM(wave);
-  let audible = false;
-  for (let i = 0; i < data.length && !audible; i += 2) {
-    audible = Math.abs(data.readInt16LE(i)) >= 128;
-  }
-  if (!audible) throw new Error('Klee TTS returned silent audio');
+  if (!hasSpeech(readPCM(wave), text, rate)) throw new Error('Klee TTS returned incomplete speech');
   await mkdir(dirname(path), {recursive: true});
   const temporary = path + '.' + randomUUID() + '.tmp';
   try {

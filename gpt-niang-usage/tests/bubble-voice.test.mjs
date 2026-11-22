@@ -113,7 +113,10 @@ test('prepared Klee bubbles play offline at their rendered speed and keep punctu
   try {
     const line = '准备好了吗？';
     const pcm = new Float32Array(32000);
-    pcm.fill(0.25, 3200, 4800);
+    pcm[3200] = 0.25;
+    const incomplete = Buffer.from(toWav(pcm, 32000));
+    await assert.rejects(cacheKleeSpeech(line, 1.25, async () => new Response(incomplete)), /incomplete speech/);
+    pcm.fill(0.25, 3200, 8000);
     const wave = Buffer.from(toWav(pcm, 32000));
     assert.equal(await cacheKleeSpeech(line, 1.25, async () => new Response(wave)), true);
     assert.equal(await cacheKleeSpeech(line, 1.25, offline), false);
