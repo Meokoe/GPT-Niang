@@ -30,7 +30,7 @@ if (!spoken.test(text)) process.exit(0);
 if (text.length > 256) throw new Error('Bubble text exceeds the character limit');
 
 const rate = speed / 100;
-let voice = values.voice;
+const voice = values.voice;
 let wave;
 let timings = [];
 if (voice === 'klee') {
@@ -38,10 +38,9 @@ if (voice === 'klee') {
     ({wave, timings} = await requestKleeSpeech(text, rate, Boolean(values.timings)));
   } catch {
     process.stderr.write('KLEE_UNAVAILABLE\n');
-    voice = 'fish';
+    process.exit(1);
   }
-}
-if (!wave) {
+} else {
   wave = toWav(synth(text.replace(/\.{3,}/g, '…'), {
     voice,
     step: VOICES[voice].step / rate,

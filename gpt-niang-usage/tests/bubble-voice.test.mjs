@@ -91,3 +91,16 @@ test('Klee sends the original bubble and speed to the local service and follows 
   assert.deepEqual(result.timings, [100, 400]);
   await assert.rejects(requestKleeSpeech(line, 1, true, async () => new Response('not a wave')));
 });
+
+test('an unavailable Klee service never produces bibibobo audio', () => {
+  const mock = 'data:text/javascript,' + encodeURIComponent(
+    'globalThis.fetch = async () => new Response(null, {status: 503});',
+  );
+  const result = spawnSync(process.execPath, ['--import', mock, cli, '--voice', 'klee'], {
+    input: '准备好了吗？',
+    timeout: 5000,
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr.toString(), /KLEE_UNAVAILABLE/);
+  assert.equal(result.stdout.length, 0);
+});

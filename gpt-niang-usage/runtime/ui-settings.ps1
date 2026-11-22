@@ -316,7 +316,7 @@ function Update-WidgetSettingsMenu{
     foreach($choice in $script:settingsMenuUi.VoiceStyles){
       $choice.IsChecked=$choice.Tag-eq $script:bubbleVoiceStyle
       if($choice.Tag-eq 'klee'){
-        $choice.ToolTip=if($script:bubbleVoiceKleeUnavailable){'上次未能连接可莉语音，已用大肥鱼播放。'}else{'通过本机可莉 TTS 服务朗读气泡。'}
+        $choice.ToolTip=if($script:bubbleVoiceKleeUnavailable){'可莉语音服务暂不可用，请检查本机 TTS 服务。'}else{'通过本机可莉 TTS 服务朗读气泡。'}
       }
     }
     $script:settingsMenuUi.VoiceSpeed.Value=$script:bubbleVoiceSpeed
